@@ -1,16 +1,17 @@
 #if(!require(shiny)){install.packages("shiny")}
 #if(!require(shiny)){install.packages("shinydashboard")}
+#if(!require(shinythemes){install.packages("shinythemes")}
 options(encoding = "UTF-8")
 require(shiny)
 require(shinydashboard)
-
+library(shinythemes)
 dashHeader <- dashboardHeader(title="Bioinformatic tool")
 
 dashSidebar <- dashboardSidebar(
   sidebarMenu(
     menuItem('Home',
              tabName='HomeTab',
-             icon=icon('dashboard')
+             icon=icon("fas fa-church")
     ),
     menuItem("Quantification",
              tabName = "Quantification_Tab",
@@ -18,14 +19,14 @@ dashSidebar <- dashboardSidebar(
     ),
     menuItem("Descriptive statistics",
              tabName = "DescriptiveStatisticsTab",
-             icon = icon("list-alt")),
+             icon = icon("fas fa-file-alt")),
     menuItem('Normality Tests',
              tabName = 'NormalityTestTab',
-             icon =  icon("list-alt")
+             icon =  icon("fas fa-eye")
     ),
     menuItem('Heteroscedasticity test',
              tabName = "HeteroscedasticityTestTab",
-             icon = icon("list-alt")
+             icon = icon("fas fa-venus-mars")
     ),
     menuItem("Mulitiple comparasion",
              tabName = "MulitipleComparasionTab",
@@ -33,40 +34,52 @@ dashSidebar <- dashboardSidebar(
     ),
     menuItem('Non-Parametric Tests',
              tabName = 'Non-ParametricTestsTab',
-             icon =  icon("fas fa-calculator")
+             icon =  icon("fas fa-align-right")
     ),
     menuItem("Correlation analysis",
              tabName = "CorrelationTab",
-             icon = icon("fas fa-calculator")
+             icon = icon("fas fa-sitemap")
+    ),
+    menuItem("Cluster analysis",
+             tabName = "ClusterTab",
+             icon = icon("far fa-object-group")#"fas fa-bars"
     ),
     menuItem('Gene ID conversion',
              tabName = 'GeneIDconversionTab',
-             icon = icon('cog')
+             icon = icon("fas fa-user-check")
     ),
     menuItem('GO classification',
              tabName = 'GOgroupTab',
-             icon = icon("fas fa-chart-bar")
+             icon = icon("fas fa-sort-alpha-down")
     ),
     menuItem('GO enrichment',
              tabName = "EnrichgoTab",
-             icon = icon("fas fa-sitemap")
+             icon = icon("fas fa-project-diagram")
     ),
     menuItem('KEGG enrichment',
              tabName = "EnrichkeggTab",
-             icon = icon("fas fa-allergies")),
-    menuItem('Cross match',
-             tabName = "CrossMatchTab",
-             icon = icon("fas fa-allergies"))
+             icon = icon("fab fa-connectdevelop")
+    )#,
+   # menuItem("DAVID functional analysis",
+          #   tabName = "DAVIDTab",
+          #   icon = icon("fas fa-dragon")
+   # )
   )
 )
-
+#icon: https://fontawesome.com/icons?d=gallery&m=free
 dashBody <- dashboardBody(
   fluidRow(
     tabItems(
       tabItem(tabName='HomeTab',
-              h1("HUNGLIN's Bioinformatic"),
-              p('If you have any further question, please contact hunglin59638@gmail.com.'),
-              em('The introduction of the application will be updated later.'),
+              h1("HUNGLIN's Bioinformatic tool"),
+              p('If you have any further question, please contact hunglin59638@gmail.com'),
+              p('The introduction of the application will be updated later.'),
+              strong("If you use GO classification, GO enrichment and KEGG 
+                     enrichment in published research, please cite:"),
+              p(strong("Guangchuang Yu, Li-Gen Wang, Yanyan Han, Qing-Yu He. 
+                       clusterProfiler: an R package for comparing biological themes 
+                       among gene clusters. OMICS: A Journal of Integrative Biology. 
+                       2012, 16(5):284-287.")),
               hr()
       ),
       tabItem(tabName = "Quantification_Tab",
@@ -120,7 +133,7 @@ dashBody <- dashboardBody(
       tabItem(tabName = "DescriptiveStatisticsTab",
               h1("Descriptive Statistics"),
               fileInput(inputId= "descriptivefile",
-                        label = "Please choose CSV file.First column is group,Second is value",
+                        label = "Please choose CSV file.Column1 is group,column2 is value",
                         multiple = F,
                         accept = c("text/csv",
                                    "text/comma-separated-values,text/plain",
@@ -146,7 +159,7 @@ dashBody <- dashboardBody(
               submitButton("Confirm"),
               hr(),
               fileInput(inputId= "normalityfile",
-                        label = "Please choose CSV file.First column is group,Second is value",
+                        label = "Please choose CSV file. Column1 is group,Column2 is value",
                         multiple = F,
                         accept = c("text/csv",
                                    "text/comma-separated-values,text/plain",
@@ -162,7 +175,7 @@ dashBody <- dashboardBody(
       tabItem(tabName = "HeteroscedasticityTestTab",
               h1("Heteroscedasticity test"),
               fileInput(inputId= "heterofile",
-                        label = "Please choose CSV file.First column is group,Second is value",
+                        label = "Please choose CSV file.Column1 is group,Column2 is value",
                         multiple = F,
                         accept = c("text/csv",
                                    "text/comma-separated-values,text/plain",
@@ -182,7 +195,7 @@ dashBody <- dashboardBody(
                           choices=c('Least Squares Means'),
                           selected='Least Squares Means'),
               fileInput(inputId= "mcomparefile",
-                        label = "Please choose CSV file.First column is group,Second is value",
+                        label = "Please choose CSV file.Column1 is group,Column2 is value",
                         multiple = F,
                         accept = c("text/csv",
                                    "text/comma-separated-values,text/plain",
@@ -208,8 +221,9 @@ dashBody <- dashboardBody(
               hr(),
               submitButton("Confirm"),
               hr(),
+              strong("Please choose CSV file."),
               fileInput(inputId= "nonparfile",
-                        label = "Please choose CSV file.First column is group,Second is value",
+                        label = "Column1 is group,column2 is value.",
                         multiple = F,
                         accept = c("text/csv",
                                    "text/comma-separated-values,text/plain",
@@ -231,8 +245,9 @@ dashBody <- dashboardBody(
               hr(),
               submitButton("Confirm"),
               hr(),
+              strong("Please choose CSV file."),
               fileInput(inputId= "correlationfile",
-                        label = "Please choose CSV file. columns are variables",
+                        label = "columns are variables",
                         multiple = F,
                         accept = c("text/csv",
                                    "text/comma-separated-values,text/plain",
@@ -249,6 +264,22 @@ dashBody <- dashboardBody(
               downloadButton(outputId = "Correlation_plot.pdf", label = "Download plot")
               
       ),
+      tabItem(tabName = "ClusterTab",
+              h1("Cluster analysis"),
+              selectInput(inputId = "cluster_method",
+                          label = "Choose a method of clustering",
+                          choices = c("one","two"),
+                          selected = "one"),
+              hr(),
+              strong("Please choose CSV file."),
+              fileInput(inputId= "clusterfile",
+                        label = "columns are variables",
+                        multiple = F,
+                        accept = c("text/csv",
+                                   "text/comma-separated-values,text/plain",
+                                   ".csv")
+              )
+              ),
       tabItem(tabName = 'GeneIDconversionTab',
               h1('Gene ID conversion'),
               selectInput(inputId = "species_choice",
@@ -301,6 +332,18 @@ dashBody <- dashboardBody(
                                                  "down_regulated" = "down_regulated",
                                                  "total" = "total")
               ),
+              checkboxGroupInput("GO_ontology",
+                                 label = h3("GO Ontology"),
+                                 choices = list("Biological Process" = "BP",
+                                                "Cellular Component" = "CC",
+                                                "Molecular Function" = "MF"),
+                                 selected = list("Biological Process" = "BP",
+                                                 "Cellular Component" = "CC",
+                                                 "Molecular Function" = "MF")
+                                 ),
+              numericInput("level_ggo", 
+                           label = h4("Specific GO level."),
+                           value = "2"),
               submitButton("Confirm"),
               hr(),
               fileInput(inputId= "file_ggo",
@@ -319,20 +362,33 @@ dashBody <- dashboardBody(
               hr(),
               mainPanel(
                 #textOutput("idtest"), 
-                tableOutput("ggo_table")
+                textOutput("ggo_test")
               )
       ),
       tabItem(tabName = "EnrichgoTab",
-              h1('GO enrichment'),
+              h1('GO over-representation test'),
               selectInput(inputId = "species_choice_ego",
-                          label = "Choose species",
+                          label = h4("Choose species"),
                           choices = c("Gallus gallus", "Sus scrofa"),
                           selected = "Gallus gallus"),
               selectInput(inputId = 'fromtype_ego',
-                          label= 'Current gene ID type',
+                          label= h4('Current gene ID type'),
                           choices= c('Accession','Gene symbol', 'Entrez ID'),
                           selected= 'Accession'
               ),
+              selectInput("padjust_ego",
+                          label = h4("Adjust p-values for multiple comparisons"),
+                          choices = c("Bonferroni","Holm","Hochberg", "Hommel",
+                                      "Benjamini & Hochberg","Benjamini & Yekutieli",
+                                      "None"),
+                          selected = "Benjamini & Hochberg"),
+              numericInput("pvalueCutoff_ego", 
+                           label = h4("Cutoff value of pvalue."),
+                           value = "0.05"),
+              numericInput("qvalueCutoff_ego",
+                           label = h4("Cutoff value of qvalue."),
+                           value = "0.2"),
+              hr(),
               checkboxGroupInput("regulated_gene_ego", 
                                  label = h3("up or down-regulation"), 
                                  choices = list("up-regulated genes" = "up_regulated",
@@ -344,7 +400,7 @@ dashBody <- dashboardBody(
               ),
               hr(),
               checkboxGroupInput("ego_options",
-                                 label = h3('Go enrichment results options'),
+                                 label = h3('Go enrichment results'),
                                  choices = list("GO dotplot" = "dotplot_ego",
                                                 "GO DAG graph" = "dag_ego",
                                                 "Gene-Concept Network for GO" = "Gene-Concept-Network_ego",
@@ -382,18 +438,31 @@ dashBody <- dashboardBody(
                              label = "Download Plots")
       ),
       tabItem(tabName = "EnrichkeggTab",
-              h1("KEGG enrichment"),
-              selectInput(inputId = "species_choice",
-                          label = "Choose species",
+              h1("KEGG over-representation test"),
+              selectInput(inputId = "species_choice_ekegg",
+                          label = h4("Choose species"),
                           choices = c("Gallus gallus", "Sus scrofa"),
                           selected = "Gallus gallus"),
               selectInput(inputId = 'fromtype_ekegg',
-                          label= 'Current gene ID type',
+                          label= h4('Current gene ID type'),
                           choices= c('Accession','Gene symbol', 'Entrez ID'),
                           selected= 'Accession'
               ),
+              selectInput("padjust_ekegg",
+                          label = h4("Adjust p-values for multiple comparisons"),
+                          choices = c("Bonferroni","Holm","Hochberg", "Hommel",
+                                      "Benjamini & Hochberg","Benjamini & Yekutieli",
+                                      "None"),
+                          selected = "Benjamini & Hochberg"),
+              numericInput("pvalueCutoff_ekegg", 
+                           label = h4("Cutoff value of pvalue."),
+                           value = "0.05"),
+              numericInput("qvalueCutoff_ekegg",
+                           label = h4("Cutoff value of qvalue."),
+                           value = "0.2"),
+              hr(),
               checkboxGroupInput("regulated_gene_ekegg", 
-                                 label = h3("up or down-regulation"), 
+                                 label = h4("up or down-regulation"), 
                                  choices = list("up-regulated genes" = "up_regulated",
                                                 "down-regulated genes" = "down_regulated",
                                                 "total genes" = "total"),
@@ -403,7 +472,7 @@ dashBody <- dashboardBody(
               ),
               hr(),
               checkboxGroupInput("ekegg_options",
-                                 label = h3('KEGG enrichment results options'),
+                                 label = h4('KEGG enrichment results'),
                                  choices = list("KEGG dotplot" = "dotplot_ekegg",
                                                 "Gene-Concept Network for KEGG" = "Gene-Concept-Network_ekegg",
                                                 "Enrichment Map for KEGG" = "emapplot_ekegg"
@@ -433,34 +502,11 @@ dashBody <- dashboardBody(
               hr(),
               downloadButton(outputId = "ekegg_plots.zip",
                              label = "Download plots"),
-              hr()
+              hr(),
+              strong("GO to Pathview Web to render pathway graphs"),
+              actionButton("pathview",label = "Pathview",
+                           onclick ="window.open('https://pathview.uncc.edu/', '_blank')")
               
-              
-      ),
-      tabItem("CrossMatchTab",
-              h1("Cross match"),
-              selectInput(inputId = "species_choice",
-                          label = "Choose species",
-                          choices = c("Gallus gallus", "Sus scrofa"),
-                          selected = "Gallus gallus"),
-              fileInput(inputId= "crossmatch1file",
-                        label = paste("Please choose CSV file.",
-                                      "Columns must contain 'Accession'",
-                                      sep= "\n"),
-                        multiple = F,
-                        accept = c(
-                          "text/csv", "text/comma-separated-values,text/plain",".csv"
-                        )
-              ),
-              fileInput(inputId= "crossmatch2file",
-                        label = "Please choose txt file.",
-                        multiple = F,
-                        accept = c(
-                          "text/csv", "text/comma-separated-values,text/plain",".csv"
-                        )
-              ),
-              downloadButton(label = "Download",
-                             outputId = "crossmatch_result.csv")
               
       )
     )
@@ -472,5 +518,6 @@ dashboardPage(
   header=dashHeader,
   sidebar=dashSidebar,
   body=dashBody,
+  skin = "black",
   title="Bioimformatic tool"
 )

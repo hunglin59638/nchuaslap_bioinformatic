@@ -22,6 +22,7 @@ options(encoding = "UTF-8")
 require(shiny)
 require(AnnotationHub)
 require(clusterProfiler)
+require(DOSE)
 require(AnnotationDbi)
 require(ggplot2)
 require(stringr)
@@ -34,6 +35,7 @@ library(FSA)
 library(lattice)
 library(car)
 library(emmeans)
+library(corrplot)
 
 #donwload gallus gallus database
 #ah <- AnnotationHub()
@@ -232,6 +234,7 @@ shinyServer( function(input, output, session) {
               xlab="Group")
     }
   )
+  
   #Normality Test
   normalitydata <- reactive({
     infile <- input$normalityfile
@@ -472,13 +475,11 @@ shinyServer( function(input, output, session) {
   )
   
   # Setting gene database
-  gene_db <- reactive({
-    infile <- input$species_choice
+  gene_db <- function(species) {
     ah <- AnnotationHub()
-    databaseid<- query(ah, c(infile,"OrgDb")) 
+    databaseid<- query(ah, c(species,"OrgDb")) 
     ah[[databaseid$ah_id]]
-    
-  })
+  }
   
   #Gene ID coversion
   gene_label2value <- function(label) {
@@ -532,7 +533,8 @@ shinyServer( function(input, output, session) {
       return(NULL)
     }
     else {
-      id<- mapIds(x = gene_db() ,keys = convertiddata(),
+      species <- input$species_choice
+      id<- mapIds(x = gene_db(species) , keys = convertiddata(),
                   keytype = current_gene_type(),
                   column = convert_gene_type()
       )
@@ -541,6 +543,7 @@ shinyServer( function(input, output, session) {
       df
     }
   })
+  
   #output$idtest <- renderPrint({convert_gene_type()})
   output$geneconvert_table<- renderTable({
     convertid()
@@ -559,6 +562,7 @@ shinyServer( function(input, output, session) {
   )
   
   #GO classification
+  
   current_gene_type_ggo <- reactive({
     infile<- input$fromtype_ggo
     if (infile =='Accession'){
@@ -574,21 +578,22 @@ shinyServer( function(input, output, session) {
   regulated_options_ggo <- reactive(input$regulated_gene_ggo)
   genelist <- reactive({
     infile_ggo <- input$file_ggo
+    ggo_species <- input$species_choice
     if (is.null(infile_ggo)) {
       return(NULL)
     }
     ggodata <- read.csv(infile_ggo$datapath)
     if(current_gene_type_ggo() == 'ACCNUM'){
       id <- str_extract(pattern = "^[A-Za-z0-9_]{6}[0-9]*",ggodata[ ,1])
-      id <- mapIds(x = gene_db() ,keys = id,
+      id <- mapIds(x = gene_db(ggo_species) ,keys = id,
                    keytype = "ACCNUM" ,column = "ENTREZID")
     } else if(current_gene_type_ggo() == 'SYMBOL'){
       id <- str_extract(pattern = "[A-Za-z0-9]+",ggodata[ ,1])
-      id <- mapIds(x = gene_db() ,keys = id,
+      id <- mapIds(x = gene_db(ggo_species) ,keys = id,
                    keytype = "SYMBOL" ,column = "ENTREZID")
     } else if(current_gene_type_ggo() == 'ENTREZID') {
       id <- str_extract(pattern = "[0-9]+",ggodata[ ,1]) 
-      id <- mapIds(x = gene_db() ,keys = id,
+      id <- mapIds(x = gene_db(ggo_species) ,keys = id,
                    keytype = 'ENTREZID' ,column = "ENTREZID") 
     }
     ggodata[ ,2] %<>% as.character() %>% 
@@ -615,47 +620,64 @@ shinyServer( function(input, output, session) {
     }
     genelist
   })
+  ontology <- reactive(input$GO_ontology)
   ggo_results <- reactive({
-    ontology<- c("BP","CC","MF")
-    if ("total" %in% regulated_options_ggo()){
-      ggo_list_total<- {}
-    }
-    if ("up_regulated" %in% regulated_options_ggo() ) {
-      ggo_list_up<- {}
-    }
-    if ("down_regulated" %in% regulated_options_ggo() ) {
-      ggo_list_down<- {}
-    }
-    for(geneid in genelist()) {
-      for(onts in ontology) {
-        ggo <- groupGO(gene= as.character(geneid[,1]), 
-                       OrgDb = gene_db(), keyType = "ENTREZID",
-                       ont= onts, level=2, readable=TRUE) %>% as.data.frame()
-        if (onts == "BP") {
-          ggo$ontology<- rep("Biological process" ,nrow(ggo))
-        } else if (onts == "CC") {
-          ggo$ontology<- rep("Cellular componenent" ,nrow(ggo))
-        } else {
-          ggo$ontology<- rep("Molecular function" ,nrow(ggo))
-        }
-        ggo %<>% filter(Count > 0)
-        if(TRUE %in% (geneid[,2] >1) && FALSE %in% (geneid[,2] >1)) {
-          name_ggo<- paste0('total',"_",onts)
-          ggo_list_total[[name_ggo]]<- ggo
-        } else if(FALSE %in% (geneid[,2] >1)) {
-          name_ggo<- paste0('down_regulated',"_",onts)
-          ggo_list_down[[name_ggo]] <- ggo
-        } else {
-          name_ggo<- paste0('up_regulated',"_",onts)
-          ggo_list_up[[name_ggo]] <- ggo
+    if(!is.null(genelist())) {
+      ggo_species <- input$species_choice
+      species_database <- gene_db(ggo_species)
+      if ("total" %in% regulated_options_ggo()){
+        ggo_list_total<- {}
+      }
+      if ("up_regulated" %in% regulated_options_ggo() ) {
+        ggo_list_up<- {}
+      }
+      if ("down_regulated" %in% regulated_options_ggo() ) {
+        ggo_list_down<- {}
+      }
+      for(geneid in genelist()) {
+        for(onts in ontology()) {
+          ggo <- groupGO(gene= as.character(geneid[,1]), 
+                         OrgDb = species_database, keyType = "ENTREZID",
+                         ont= onts, level= input$level_ggo,
+                         readable=TRUE) %>% as.data.frame()
+          if (onts == "BP") {
+            ggo$ontology<- rep("Biological process" ,nrow(ggo))
+          } else if (onts == "CC") {
+            ggo$ontology<- rep("Cellular component" ,nrow(ggo))
+          } else {
+            ggo$ontology<- rep("Molecular function" ,nrow(ggo))
+          }
+          ggo %<>% filter(Count > 0)
+          if(TRUE %in% (geneid[,2] >1) && FALSE %in% (geneid[,2] >1)) {
+            name_ggo<- paste0('total',"_",onts)
+            ggo_list_total[[name_ggo]]<- ggo
+          } else if(FALSE %in% (geneid[,2] >1)) {
+            name_ggo<- paste0('down_regulated',"_",onts)
+            ggo_list_down[[name_ggo]] <- ggo
+          } else {
+            name_ggo<- paste0('up_regulated',"_",onts)
+            ggo_list_up[[name_ggo]] <- ggo
+          }
         }
       }
-    }
-    ggo_list <- list(groupGO_total_lv2 = ggo_list_total,
-                     groupGO_up_lv2 = ggo_list_up,
-                     groupGO_down_lv2 = ggo_list_down)
-    rbind_list <- function(x) {ldply(x,rbind)}
-    ggo_list %>% llply(rbind_list)
+      #here need to decide which is total, up, down, or it will be error.
+      ggo_list <- {}
+      if ("total" %in% regulated_options_ggo()){
+        ggo_list[["groupGO_total"]] <- ggo_list_total
+      }
+      if ("up_regulated" %in% regulated_options_ggo() ) {
+        ggo_list[["groupGO_up"]] <- ggo_list_up
+      }
+      if ("down_regulated" %in% regulated_options_ggo() ) {
+        ggo_list[["groupGO_down"]] <- ggo_list_down
+      }
+      
+      rbind_list <- function(x) {ldply(x,rbind)}
+      ggo_list %>% llply(rbind_list)
+      
+      
+    } else{return(NULL)}
+    
   })
   
   output$ggo_results.zip <- downloadHandler(
@@ -698,39 +720,58 @@ shinyServer( function(input, output, session) {
         sort_df <- sort_df[order(sort_df[['ontology']],-sort_df[['Count']]), ]
         sort_df$Description <- factor(sort_df$Description,
                                       levels= sort_df$Description)
-        sort_df_BP <- filter(sort_df, ontology == "Biological process")
-        sort_df_CC <- filter(sort_df, ontology == "Cellular componenent")
-        sort_df_MF <- filter(sort_df, ontology == "Molecular function")
-        if (nrow(sort_df_BP) >10) {
-          sort_df_BP <- sort_df_BP[1:10, ]
+        sort_df_all <- data.frame()
+        if("BP" %in% ontology()) {
+          sort_df_BP <- filter(sort_df, ontology == "Biological process")
+          if (nrow(sort_df_BP) >10) {
+            sort_df_BP <- sort_df_BP[1:10, ]
+          }
+          sort_df_all <- rbind(sort_df_all, sort_df_BP, deparse.level = T)
         }
-        if (nrow(sort_df_CC) >10) {
-          sort_df_CC <- sort_df_CC[1:10, ]
+        if("CC" %in% ontology()) {
+          sort_df_CC <- filter(sort_df, ontology == "Cellular component")
+          if (nrow(sort_df_CC) >10) {
+            sort_df_CC <- sort_df_CC[1:10, ]
+          }
+          sort_df_all <- rbind(sort_df_all, sort_df_CC,deparse.level = T)
         }
-        if (nrow(sort_df_MF) >10) {
-          sort_df_MF <- sort_df_MF[1:10]
+        if("MF" %in% ontology()) {
+          sort_df_MF <- filter(sort_df, ontology == "Molecular function")
+          if (nrow(sort_df_MF) >10) {
+            sort_df_MF <- sort_df_MF[1:10, ]
+          }
+          sort_df_all <- rbind(sort_df_all, sort_df_MF,deparse.level = T)
         }
+        sort_df_all$Description <- factor(sort_df_all$Description,
+                                      levels= sort_df_all$Description)
         fs <- c(fs,paste('groupgo_',
                          str_extract_all(sort_df$.id[1],pattern = "^[a-z]*"),
                          '.png',sep = ''))
-        sort_df <- rbind(sort_df_BP,sort_df_CC,sort_df_MF)
-        sort_df$Description <- factor(sort_df$Description,levels=sort_df$Description)
         
-        ggplot(data = sort_df, mapping = aes(x=Description ,y= Count,fill=ontology))+
+        #sort_df <- rbind(sort_df_BP,sort_df_CC,sort_df_MF)
+        #sort_df$Description <- factor(sort_df$Description,levels=sort_df$Description)
+        if(length(ontology())==3) {
+          word_size <- 10
+        } else if(length(ontology()==2)){
+          word_size <- 11
+        } else if(length(ontology() == 1)) {
+          word_size <- 13
+        }
+        ggplot(data = sort_df_all, mapping = aes(x=Description ,y= Count,fill=ontology))+
           geom_bar(stat="identity") +
           coord_flip()+
-          scale_x_discrete(limits=rev(levels(sort_df$Description)))+
+          scale_x_discrete(limits=rev(levels(sort_df_all$Description)))+
           labs( x='Term', fill ='Ontology') +
-          theme_bw(base_size = 10)
+          theme_bw(base_size = word_size)
         #ggplot(data = sort_df, mapping = aes(x=rev(Description) ,y= Count,fill=ontology))+
-         # geom_bar(stat="identity",position = "dodge") +
+        # geom_bar(stat="identity",position = "dodge") +
         #  scale_y_continuous(labels = function (x) floor(x)) +
         #  coord_flip()+
         #  labs( x='Term', fill ='Ontology') +
         #  theme_bw(base_size = 10)
         ggsave(paste('groupgo_',
                      str_extract_all(sort_df$.id[1],pattern = "^[a-z]*"),
-                     '.png',sep = ''))
+                     '.png',sep = ''), width = 20, height = 12, units = "cm")
         progress$inc(1/length(names(ggo_results())), detail = "Please wait...")
       }
       zip::zip(zipfile= fname, files=fs)
@@ -738,21 +779,22 @@ shinyServer( function(input, output, session) {
     }
     
   )
-  output$ggo_table <- renderTable({
-    if (is.null(genelist())) {
-      return(NULL)
+  output$ggo_test <- renderPrint({
+    if (is.null(ggo_results())) {
+      cat("Not yet" ,sep = "")
     } else {
-      genelist()[["total"]]
+      cat("Ready!!" ,sep = "")
     }
     
   })
   #GO enrichment
+  
   gene_db_ego <- reactive({
-      infile <- input$species_choice_ego
-      ah <- AnnotationHub()
-      databaseid<- query(ah, c(infile,"OrgDb")) 
-      ah[[databaseid$ah_id]]
-    })
+    infile <- input$species_choice_ego
+    ah <- AnnotationHub()
+    databaseid<- query(ah, c(infile,"OrgDb")) 
+    ah[[databaseid$ah_id]]
+  })
   
   current_gene_type_ego <- reactive({
     infile<- input$fromtype_ego
@@ -822,8 +864,20 @@ shinyServer( function(input, output, session) {
       }
       genelist
     }
-    }) 
-  
+  })
+  padjust.method.ego <- reactive({
+    padjust.methods <- input$padjust_ego
+    if(padjust.methods == "Bonferroni") {return("bonferroni")
+      } else if (padjust.methods == "Holm") {return("holm")
+      } else if (padjust.methods == "Hochberg") {return( "hochberg")
+      } else if (padjust.methods == "Hommel") {return("hommel")
+      } else if (padjust.methods == "Benjamini & Hochberg") {return("BH")
+      } else if (padjust.methods == "Benjamini & Yekutieli") {return("BY")
+      } else if (padjust.methods == "None") {return("none")
+        }
+  })
+  pavalue_ego <- reactive(input$pvalueCutoff_ego)
+  qavalue_ego <- reactive(input$qvalueCutoff_ego)
   ego_results <- reactive({
     ego_results<- list()
     ontology<- c("BP","CC","MF")
@@ -835,9 +889,11 @@ shinyServer( function(input, output, session) {
                        OrgDb         = gene_db_ego(), 
                        keyType = "ENTREZID",
                        ont = onts, #'ALL','BP',"MF','CC'
-                       pAdjustMethod = "BH", # BH is the other name of fdr
-                       pvalueCutoff = 0.05,
-                       qvalueCutoff  = 0.2,
+                       pAdjustMethod = padjust.method.ego(), 
+                       # BH is the other name of fdr
+                       #https://www.rdocumentation.org/packages/stats/versions/3.5.0/topics/p.adjust
+                       pvalueCutoff = pavalue_ego(),
+                       qvalueCutoff  = qavalue_ego(),
                        minGSSize = 10, 
                        maxGSSize = 500, 
                        readable = T, #"ENTREZID"convert'SYMBOL'
@@ -872,10 +928,20 @@ shinyServer( function(input, output, session) {
       }
       ego_list_df<- llply(ego_results(), ego_list_to_df)
       for (result in ego_list_df) {
-        write.csv(result, file = paste0("ego_",result$regulation[1],".csv"),
-                  row.names =FALSE)
-        fs <- c(fs, paste0("ego_",result$regulation,".csv"))
+        if (nrow(result) > 2) {
+          write.csv(result, 
+                    file = paste0("ego_",result$regulation[1],".csv"),
+                    row.names =FALSE)
+          fs <- c(fs, paste0("ego_",result$regulation,".csv"))
+        } else {
+          #write.csv(data.frame(result= "none"), 
+          #          file = paste0("ego_",result$regulation[1],".csv"),
+          #          row.names =FALSE)
+          #fs <- c(fs, paste0("ego_",result$regulation,".csv"))
+          next
+        }
         progress$inc(1/length(ego_list_df), detail = "Please wait...")
+        
       }
       
       zip::zip(zipfile = fname, files = fs)
@@ -897,12 +963,13 @@ shinyServer( function(input, output, session) {
       ego_plot<- function(object, plot.type) {
         if(plot.type == "dotplot_ego") {
           object %>% clusterProfiler::dotplot(x= "GeneRatio",
-                                              font.size= 10,
+                                              font.size= 9,
                                               color ="p.adjust", 
-                                              showCategory = 20#, #list how much items
+                                              showCategory = 20,
+                                             #, #list how much items
                                               #title= 'up-regulated'
           ) +  
-            ggplot2::scale_color_continuous(low='blue', high='red') +
+            ggplot2::scale_color_continuous(low='red', high='blue') +
             scale_size(range=c(2, 7))
         }
         if(plot.type == "dag_ego") {
@@ -910,15 +977,17 @@ shinyServer( function(input, output, session) {
                            '_',object@ontology,'_',
                            str_extract_all(plot.type,pattern = "^[a-z|A-Z]*[^_]*"),
                            '.pdf',sep = ''))
-          plotGOgraph(object)
+          plotGOgraph(object, sigForAll = TRUE)
           dev.off()
         }
         if(plot.type == "Gene-Concept-Network_ego") {
-          object %>% cnetplot(categorySize = "p.adjust", showCategory = 5)
+          object %>% cnetplot(categorySize = "p.adjust", showCategory = 10, 
+                              font.size= 10)
         }
         if(plot.type == "emapplot_ego") {
-          object %>% emapplot(showCategory = 20, color = "p.adjust", layout = "kk",vertex.label.cex=1.2)
-        }
+          object %>% emapplot(showCategory = 20, color = "p.adjust", 
+                              layout = "kk", vertex.label.cex=1.2, font.size= 15)
+        }#layout=igraph::layout.kamada.kawai
         if(plot.type != "dag_ego") {
           ggsave(paste('enrichgo_',object@result$regulation[1],
                        '_',object@ontology,'_',
@@ -930,9 +999,8 @@ shinyServer( function(input, output, session) {
       
       if("total" %in% regulated_options_ego()) {
         for (result in ego_results()[["ego_total"]]) {
-          for ( plot_type in ego_result_options() ) {
-            ego_plot(result, plot_type)
-            if(nrow(data.frame(result)) != 0) {
+          for (plot_type in ego_result_options() ) {
+            if(nrow(data.frame(result)) >2 ) {
               ego_plot(result, plot_type)
               if (plot_type != "dag_ego") {
                 fs <- c(fs,paste('enrichgo_',result@result$regulation[1],
@@ -945,7 +1013,15 @@ shinyServer( function(input, output, session) {
                                  str_extract_all(plot_type,pattern = "^[a-z|A-Z]*[^_]*"),
                                  '.pdf',sep = ''))
               }
-            } else {next}
+            } else {
+              if(plot_type =="dag_ego") {
+                ego_plot(result, plot_type)
+                fs <- c(fs,paste('enrichgo_',result@result$regulation[1],
+                                 '_',result@ontology,'_',
+                                 str_extract_all(plot_type,pattern = "^[a-z|A-Z]*[^_]*"),
+                                 '.pdf',sep = ''))
+                } else {next}
+              }
             progress$inc(1/(length(ego_results())*length(ego_result_options())*3), detail = "Please wait...")
           }
         }
@@ -953,8 +1029,7 @@ shinyServer( function(input, output, session) {
       if("up_regulated" %in% regulated_options_ego()) {
         for (result in ego_results()[["ego_up"]]) {
           for ( plot_type in ego_result_options() ) {
-            ego_plot(result, plot_type)
-            if(nrow(data.frame(result)) != 0) {
+            if(nrow(data.frame(result)) >2 ) {
               ego_plot(result, plot_type)
               if (plot_type != "dag_ego") {
                 fs <- c(fs,paste('enrichgo_',result@result$regulation[1],
@@ -967,7 +1042,15 @@ shinyServer( function(input, output, session) {
                                  str_extract_all(plot_type,pattern = "^[a-z|A-Z]*[^_]*"),
                                  '.pdf',sep = ''))
               }
-            } else {next}
+            } else {
+              if(plot_type =="dag_ego") {
+                ego_plot(result, plot_type)
+                fs <- c(fs,paste('enrichgo_',result@result$regulation[1],
+                                 '_',result@ontology,'_',
+                                 str_extract_all(plot_type,pattern = "^[a-z|A-Z]*[^_]*"),
+                                 '.pdf',sep = ''))
+              } else {next}
+            }
             progress$inc(1/(length(ego_results())*length(ego_result_options())*3), detail = "Please wait...")
             
           }
@@ -976,7 +1059,7 @@ shinyServer( function(input, output, session) {
       if("down_regulated" %in% regulated_options_ego()) {
         for (result in ego_results()[["ego_down"]]) {
           for ( plot_type in ego_result_options() ) {
-            if(nrow(data.frame(result)) != 0) {
+            if(nrow(data.frame(result)) >2 ) {
               ego_plot(result, plot_type)
               if (plot_type != "dag_ego") {
                 fs <- c(fs,paste('enrichgo_',result@result$regulation[1],
@@ -989,7 +1072,15 @@ shinyServer( function(input, output, session) {
                                  str_extract_all(plot_type,pattern = "^[a-z|A-Z]*[^_]*"),
                                  '.pdf',sep = ''))
               }
-            } else {next}
+            } else {
+              if(plot_type =="dag_ego") {
+                ego_plot(result, plot_type)
+                fs <- c(fs,paste('enrichgo_',result@result$regulation[1],
+                                 '_',result@ontology,'_',
+                                 str_extract_all(plot_type,pattern = "^[a-z|A-Z]*[^_]*"),
+                                 '.pdf',sep = ''))
+              } else{next}
+            }
             progress$inc(1/(length(ego_results())*length(ego_result_options())*3), detail = "Please wait...")
           }
         }
@@ -1017,8 +1108,8 @@ shinyServer( function(input, output, session) {
     }
   })
   
-#  output$test <- renderPrint({
- #   input$species_choice_ego
+  #  output$test <- renderPrint({
+  #   input$species_choice_ego
   #})
   
   
@@ -1041,12 +1132,50 @@ shinyServer( function(input, output, session) {
     if (is.null(ekeggdata())) {
       return(NULL)
     } else {
-      genelist_fun(genedata = ekeggdata(), current = current_gene_type_ekegg(),
-                   regulated = regulated_options_ekegg())
+      database <- gene_db(input$species_choice_ekegg)
+      genedata <- ekeggdata() 
+      current <- current_gene_type_ekegg()
+      regulated <- regulated_options_ekegg()
+      if(current == 'ACCNUM'){
+        id <- str_extract(pattern = "^[A-Za-z0-9_]{6}[0-9]*",genedata[ ,1])
+        id <- mapIds(x = database ,keys = id,
+                     keytype = "ACCNUM" ,column = "ENTREZID")
+      } else if(current == 'SYMBOL'){
+        id <- str_extract(pattern = "[A-Za-z0-9]+",genedata[ ,1])
+        id <- mapIds(x = database ,keys = id,
+                     keytype = "SYMBOL" ,column = "ENTREZID")
+      } else if(current == 'ENTREZID') {
+        id <- str_extract(pattern = "[0-9]+",genedata[ ,1])
+        id <- mapIds(x = database,keys = id,
+                     keytype = 'ENTREZID' ,column = "ENTREZID") 
+      }
+      genedata[ ,2] %<>% as.character() %>% 
+        str_extract_all("^[0-9]*([0-9]|\\.)([0-9]*)") %>% as.numeric()
+      genelist_total <- data.frame(geneid = id, 
+                                   ratio = genedata[ ,2],
+                                   stringsAsFactors = F) 
+      genelist_total%<>% filter(!is.na(genelist_total$geneid))
+      genelist <- {}
+      if ("up_regulated" %in% regulated ) {
+        genelist_up <- genelist_total %>% filter(ratio > 1)
+        genelist_up$regulation <- rep('up',nrow(genelist_up))
+        genelist[["up_regulated"]] <- genelist_up
+        
+      }
+      if ("down_regulated" %in% regulated ) {
+        genelist_down <- genelist_total %>% filter(ratio < 1)
+        genelist_down$regulation <- rep('down',nrow(genelist_down))
+        genelist[["down_regulated"]] <- genelist_down
+      }
+      if ("total" %in% regulated ) {
+        genelist_total$regulation <- rep('total',nrow(genelist_total))
+        genelist[["total"]] <- genelist_total
+      }
+      genelist
     }
   })
   kegg_species<- reactive({
-    infile <- input$species_choice
+    infile <- input$species_choice_ekegg
     if(infile == "Gallus gallus") {
       returnValue("gga")
     }
@@ -1054,7 +1183,21 @@ shinyServer( function(input, output, session) {
       returnValue("ssc")
     }
   })
+  padjust.method.ekegg <- reactive({
+    padjust.methods <- input$padjust_ekegg
+    if(padjust.methods == "Bonferroni") {return("bonferroni")
+    } else if (padjust.methods == "Holm") {return("holm")
+    } else if (padjust.methods == "Hochberg") {return( "hochberg")
+    } else if (padjust.methods == "Hommel") {return("hommel")
+    } else if (padjust.methods == "Benjamini & Hochberg") {return("BH")
+    } else if (padjust.methods == "Benjamini & Yekutieli") {return("BY")
+    } else if (padjust.methods == "None") {return("none")}
+  })
+  pavalue_ekegg <- reactive(input$pvalueCutoff_ekegg)
+  qavalue_ekegg <- reactive(input$qvalueCutoff_ekegg)
   ekegg_results <- reactive({
+    infile <- input$species_choice_ekegg
+    genedatabase <- gene_db(infile)
     ekegg_results<- list()
     # kegg_id<- bitr_kegg(genelist_down$ENTREZID,
     #                    fromType = "ncbi-geneid",
@@ -1063,10 +1206,11 @@ shinyServer( function(input, output, session) {
     for(geneid_ekegg in genelist_ekegg()) {
       ekegg<- enrichKEGG(geneid_ekegg$geneid , organism= kegg_species(),
                          keyType =  "ncbi-geneid",
-                         pvalueCutoff=0.05, pAdjustMethod="BH",
-                         qvalueCutoff=0.1,
+                         pvalueCutoff= pavalue_ekegg(), 
+                         pAdjustMethod= padjust.method.ekegg(),
+                         qvalueCutoff= qavalue_ekegg(),
                          use_internal_data= F) %>% 
-        setReadable(., OrgDb = gene_db(),keytype = "ENTREZID")
+        setReadable(., OrgDb = genedatabase,keytype = "ENTREZID")
       ekegg@result$regulation <- rep(geneid_ekegg$regulation[1], 
                                      nrow(ekegg@result))
       ekegg_results[[paste0("ekegg_",geneid_ekegg$regulation[1])]] <- ekegg
@@ -1087,13 +1231,16 @@ shinyServer( function(input, output, session) {
       progress$set(message = "Begin to download results：", value = 0)
       
       for (result in ekegg_results()) {
-        write.csv(data.frame(result), 
-                  file = paste("enrichkegg_",result@result$regulation[1],
-                               ".csv", sep = ""),
-                  row.names = F)
-        fs <- c(fs,paste("enrichkegg_",result@result$regulation[1],
-                         ".csv", sep = ""))
-        progress$inc(1/length(ekegg_results()), detail = "Please wait...")
+        if (nrow(result) != 0) {
+          write.csv(data.frame(result), 
+                    file = paste("enrichkegg_",result@result$regulation[1],
+                                 ".csv", sep = ""),
+                    row.names = F)
+          fs <- c(fs,paste("enrichkegg_",result@result$regulation[1],
+                           ".csv", sep = ""))
+          progress$inc(1/length(ekegg_results()), detail = "Please wait...")
+        } else {next}
+        
       }
       zip::zip(zipfile = fname, files = fs)
     }
@@ -1114,7 +1261,7 @@ shinyServer( function(input, output, session) {
       ekegg_plot<- function(object, plot.type) {
         if(plot.type == "dotplot_ekegg") {
           object %>% clusterProfiler::dotplot(x= "GeneRatio",
-                                              font.size= 10,
+                                              font.size= 9,
                                               color ="p.adjust", 
                                               showCategory = 20) 
         }
@@ -1122,7 +1269,8 @@ shinyServer( function(input, output, session) {
           object %>% cnetplot(categorySize = "p.adjust", showCategory = 5)
         }
         if(plot.type == "emapplot_ekegg") {
-          object %>% emapplot(showCategory = 20, color = "p.adjust", layout = "kk",vertex.label.cex=1.2)
+          object %>% emapplot(showCategory = 20, color = "p.adjust", layout = "kk",
+                              vertex.label.cex=1.2)
         }
         ggsave(paste('enrichkegg_',result@result$regulation[1],'_',
                      str_extract_all(plot_type,pattern = "^[a-z|A-Z]*[^_]*"),
@@ -1146,55 +1294,13 @@ shinyServer( function(input, output, session) {
     }
   )
   output$test_ekegg<- renderPrint({
-    result_options_ekegg()
+    #result_options_ekegg()
     if(length(ekegg_results()) == 0) {
       cat("Not yet" ,sep = "")} else {
         cat("Ready!" ,sep = "")
       }
   })
   
-  #Cross match
-  crossmatchdata1 <- reactive({
-    infile <- input$crossmatch1file
-    if (is.null(infile)) {return(NULL)
-    } else {
-      read.csv(infile$datapath, header = T)
-    }
-  })
-  crossmatchdata2 <- reactive({
-    infile <- input$crossmatch2file
-    if (is.null(infile)) {return(NULL)
-    } else {
-      read.csv(infile$datapath, header = T, sep = "\t")
-    }
-  })
   
-  crossmatchresult <- reactive({
-    if (is.null(crossmatchdata1())) {
-      return(NULL)
-    } else if (is.null(crossmatchdata1()$Accession)) {
-      cat("Please rename the title of columns with 'Accession' ")
-    }  else {
-      data1 <- crossmatchdata1()
-      data2 <- crossmatchdata2()
-      data1$Accession %<>% sub("..$","", . ) #remove . (version)
-      data1$EntrezID <- mapIds(x = gene_db() ,keys = data1$Accession ,
-                               keytype = "ACCNUM" ,column = "ENTREZID")
-      data1 %>% filter(EntrezID %in% data2$GeneID | EntrezID %in% NA)
-      
-    }
-  })
-  
-  output$crossmatch_result.csv <- downloadHandler(
-    filename = function() {
-      paste0("matchacross_result", ".csv")
-    },
-    content = function(fname) {
-      write.csv(crossmatchresult(), 
-                file = fname,
-                row.names = F)
-    },
-    contentType = NA
-  )
   
 })
