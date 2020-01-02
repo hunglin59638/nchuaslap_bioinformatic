@@ -1,6 +1,7 @@
 #if(!require(shiny)){install.packages("shiny")}
 #if(!require(shiny)){install.packages("shinydashboard")}
 #if(!require(shinythemes){install.packages("shinythemes")}
+
 options(encoding = "UTF-8")
 require(shiny)
 require(shinydashboard)
